@@ -385,7 +385,6 @@ export default function Maps() {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [canDeleteDraft, setCanDeleteDraft] = useState(true)
-    const [canUploadImageDraft, setCanUploadImageDraft] = useState(true)
     const [missingImageMarkerIds, setMissingImageMarkerIds] = useState<Set<number>>(new Set())
     const overlayTopOffset = 'calc(env(safe-area-inset-top, 0px) + 12px)'
     const overlayBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 20px)'
@@ -788,7 +787,6 @@ export default function Maps() {
         setMarkImageFile(null)
         setEditingId(null)
         setCanDeleteDraft(true)
-        setCanUploadImageDraft(true)
         setAddMode(false)
     }
 
@@ -809,7 +807,6 @@ export default function Maps() {
         setMarkImageFile(null)
         setEditingId(m.id)
         setCanDeleteDraft(isOwner)
-        setCanUploadImageDraft(isOwner)
         setAddMode(false)
     }
 
@@ -818,7 +815,6 @@ export default function Maps() {
         setMarkImageFile(null)
         setEditingId(null)
         setCanDeleteDraft(true)
-        setCanUploadImageDraft(true)
     }
 
     const recenterToUserLocation = () => {
@@ -935,7 +931,7 @@ export default function Maps() {
                 created = res.data
             }
 
-            if (markImageFile && canUploadImageDraft) {
+            if (markImageFile) {
                 const form = new FormData()
                 form.append('file', markImageFile)
                 const imgRes = await axios.post<ApiMarker>(
@@ -1757,7 +1753,6 @@ export default function Maps() {
                 draft={draft}
                 editingId={editingId}
                 canDelete={canDeleteDraft}
-                canUploadImage={canUploadImageDraft}
                 categoryLabel={categoryLabel}
                 markImageFile={markImageFile}
                 setDraft={setDraft}
