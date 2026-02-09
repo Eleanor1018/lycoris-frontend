@@ -14,6 +14,18 @@ export default function ChangePassword() {
             borderRadius: 3,
         },
     }
+    const getErrorMessage = (err: unknown, fallback: string) => {
+        if (typeof err === 'object' && err !== null && 'response' in err) {
+            const response = (err as { response?: { data?: unknown } }).response
+            const data = response?.data
+            if (typeof data === 'string') return data
+            if (data && typeof data === 'object' && 'message' in data) {
+                const msg = (data as { message?: unknown }).message
+                if (typeof msg === 'string') return msg
+            }
+        }
+        return fallback
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -40,9 +52,8 @@ export default function ChangePassword() {
             } else {
                 setError(res.data?.message || '修改失败')
             }
-        } catch (e: any) {
-            const msg = e?.response?.data?.message || e?.response?.data || '修改失败'
-            setError(String(msg))
+        } catch (e: unknown) {
+            setError(getErrorMessage(e, '修改失败'))
         }
     }
 

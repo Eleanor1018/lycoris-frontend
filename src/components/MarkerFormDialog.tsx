@@ -45,6 +45,7 @@ type Props = {
     onSave: () => void
     onDelete: () => void
     onMarkImageChange: (file: File | null) => void
+    canUploadImage?: boolean
 }
 
 export default function MarkerFormDialog({
@@ -59,6 +60,7 @@ export default function MarkerFormDialog({
     onSave,
     onDelete,
     onMarkImageChange,
+    canUploadImage = true,
 }: Props) {
     const [imageError, setImageError] = useState('')
     const [imageHint, setImageHint] = useState('')
@@ -84,7 +86,7 @@ export default function MarkerFormDialog({
         setStartMinuteInput(start.minute)
         setEndHourInput(end.hour)
         setEndMinuteInput(end.minute)
-    }, [open, draft?.tempId])
+    }, [open, draft?.tempId, draft?.openTimeStart, draft?.openTimeEnd])
 
     const fieldSx = {
         '& .MuiOutlinedInput-root': {
@@ -237,6 +239,7 @@ export default function MarkerFormDialog({
                     <Button
                         variant="outlined"
                         component="label"
+                        disabled={!canUploadImage}
                         sx={{
                             borderRadius: 999,
                             textTransform: 'none',
@@ -244,11 +247,12 @@ export default function MarkerFormDialog({
                             color: '#744988',
                         }}
                     >
-                        选择图片（可选）
+                        {canUploadImage ? '选择图片（可选）' : '仅创建者可上传图片'}
                             <input
                                 type="file"
                                 accept="image/*"
                                 hidden
+                                disabled={!canUploadImage}
                                 onChange={async (e) => {
                                     const f = e.target.files?.[0] ?? null
                                     if (!f) {
@@ -307,8 +311,9 @@ export default function MarkerFormDialog({
                                         }
 
                                         onMarkImageChange(nextFile)
-                                    } catch (err: any) {
-                                        setImageError(err?.message || '图片处理失败，请换一张图片试试')
+                                    } catch (err: unknown) {
+                                        const message = err instanceof Error ? err.message : '图片处理失败，请换一张图片试试'
+                                        setImageError(message)
                                         onMarkImageChange(null)
                                         e.currentTarget.value = ''
                                     } finally {

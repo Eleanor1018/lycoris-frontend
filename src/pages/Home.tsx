@@ -20,12 +20,14 @@ export default function Home() {
         const shouldOpen = window.localStorage.getItem('onboarding.editProfileAfterRegister') === '1'
         if (!shouldOpen) return
         window.localStorage.removeItem('onboarding.editProfileAfterRegister')
-
-        setNickname(user.nickname || user.username || '')
-        setPronouns(user.pronouns || '')
-        setSignature(user.signature || '')
-        setAvatarFile(null)
-        setEditOpen(true)
+        const timer = window.setTimeout(() => {
+            setNickname(user.nickname || user.username || '')
+            setPronouns(user.pronouns || '')
+            setSignature(user.signature || '')
+            setAvatarFile(null)
+            setEditOpen(true)
+        }, 0)
+        return () => window.clearTimeout(timer)
     }, [user])
 
     return (

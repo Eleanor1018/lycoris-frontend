@@ -6,6 +6,18 @@ import {useAuth} from "../auth/AuthProvider.tsx";
 
 
 export default function Register() {
+    const getErrorMessage = (err: unknown, fallback: string) => {
+        if (typeof err === 'object' && err !== null && 'response' in err) {
+            const response = (err as { response?: { data?: unknown } }).response
+            const data = response?.data
+            if (typeof data === 'string') return data
+            if (data && typeof data === 'object' && 'message' in data) {
+                const msg = (data as { message?: unknown }).message
+                if (typeof msg === 'string') return msg
+            }
+        }
+        return fallback
+    }
 
     const [registerForm, setRegisterForm] = useState({
         username: "",
@@ -43,8 +55,8 @@ export default function Register() {
             }
 
             }
-        catch(error:any){
-            const errorMsg = error.response.data.message || error.response.data || "注册失败，请检查用户名和密码是否正确";
+        catch(error: unknown){
+            const errorMsg = getErrorMessage(error, "注册失败，请检查用户名和密码是否正确")
             setErrorMessage(errorMsg);
         }
 

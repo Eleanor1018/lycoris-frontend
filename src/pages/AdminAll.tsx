@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import {
     Box,
@@ -62,17 +62,29 @@ export default function AdminAll() {
     const [draft, setDraft] = useState<DraftMarker | null>(null)
     const [editingId, setEditingId] = useState<number | null>(null)
     const [markImageFile, setMarkImageFile] = useState<File | null>(null)
+    const getErrorMessage = (err: unknown, fallback: string) => {
+        if (typeof err === 'object' && err !== null && 'response' in err) {
+            const response = (err as { response?: { data?: unknown } }).response
+            const data = response?.data
+            if (typeof data === 'string') return data
+            if (data && typeof data === 'object' && 'message' in data) {
+                const msg = (data as { message?: unknown }).message
+                if (typeof msg === 'string') return msg
+            }
+        }
+        return fallback
+    }
 
     const filteredMarkers = useMemo(() => markers, [markers])
 
-    const loadAll = async () => {
+    const loadAll = useCallback(async () => {
         setLoading(true)
         try {
             const res = await axios.get<AdminMarker[]>('/api/admin/markers/all', { withCredentials: true })
             setMarkers(res.data || [])
             setError(null)
-        } catch (e: any) {
-            const message = e?.response?.data || '无法加载点位列表'
+        } catch (e: unknown) {
+            const message = getErrorMessage(e, '无法加载点位列表')
             if (String(message).includes('二级密码')) {
                 setVerified(false)
             }
@@ -80,13 +92,13 @@ export default function AdminAll() {
         } finally {
             setLoading(false)
         }
-    }
+    }, [])
 
     useEffect(() => {
         if (verified) {
-            loadAll()
+            void loadAll()
         }
-    }, [verified])
+    }, [verified, loadAll])
 
     const handleVerify = async () => {
         try {
@@ -97,8 +109,8 @@ export default function AdminAll() {
             )
             setVerified(true)
             setError(null)
-        } catch (e: any) {
-            setError(e?.response?.data || '二级密码验证失败')
+        } catch (e: unknown) {
+            setError(getErrorMessage(e, '二级密码验证失败'))
         }
     }
 
@@ -126,8 +138,8 @@ export default function AdminAll() {
             setMarkers((prev) => prev.map((m) => (m.id === editingId ? res.data : m)))
             setEditingId(null)
             setDraft(null)
-        } catch (e: any) {
-            setError(e?.response?.data || '保存失败')
+        } catch (e: unknown) {
+            setError(getErrorMessage(e, '保存失败'))
         }
     }
 
@@ -138,8 +150,8 @@ export default function AdminAll() {
             setMarkers((prev) => prev.filter((m) => m.id !== editingId))
             setEditingId(null)
             setDraft(null)
-        } catch (e: any) {
-            setError(e?.response?.data || '删除失败')
+        } catch (e: unknown) {
+            setError(getErrorMessage(e, '删除失败'))
         }
     }
 

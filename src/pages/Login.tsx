@@ -5,6 +5,18 @@ import { Button, TextField, Stack, Typography, Alert, Box } from '@mui/material'
 import {useAuth} from "../auth/AuthProvider.tsx";
 
 export default function Login(){
+    const getErrorMessage = (err: unknown, fallback: string) => {
+        if (typeof err === 'object' && err !== null && 'response' in err) {
+            const response = (err as { response?: { data?: unknown } }).response
+            const data = response?.data
+            if (typeof data === 'string') return data
+            if (data && typeof data === 'object' && 'message' in data) {
+                const msg = (data as { message?: unknown }).message
+                if (typeof msg === 'string') return msg
+            }
+        }
+        return fallback
+    }
 
     const [loginForm, setLoginForm] = useState({
         username: "",
@@ -32,8 +44,8 @@ export default function Login(){
             else{
                 setErrorMessage(response.data);
             }
-        }catch(err:any){
-            const errorMSG = err.response.data.message || err.response.data || 'login failed.';
+        }catch(err: unknown){
+            const errorMSG = getErrorMessage(err, 'login failed.')
             setErrorMessage(errorMSG);
         }
     }

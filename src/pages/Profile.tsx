@@ -37,6 +37,16 @@ type MarkerRow = {
     lng?: number
 }
 
+type MarkerApiRow = {
+    id: number
+    title: string
+    category: string
+    updatedAt?: string
+    createdAt?: string
+    lat?: number
+    lng?: number
+}
+
 const categoryLabelMap: Record<string, string> = {
     accessible_toilet: '无障碍卫生间',
     friendly_clinic: '友好医疗机构',
@@ -60,7 +70,10 @@ export default function Profile() {
     const [avatarFile, setAvatarFile] = useState<File | null>(null)
     const [saveOpen, setSaveOpen] = useState(false)
     const [jumpDialogOpen, setJumpDialogOpen] = useState(false)
-    const [jumpNoPrompt, setJumpNoPrompt] = useState(false)
+    const [jumpNoPrompt, setJumpNoPrompt] = useState(() => {
+        if (typeof window === 'undefined') return false
+        return window.localStorage.getItem('profile.skipMapJumpConfirm') === '1'
+    })
     const [pendingJumpMarker, setPendingJumpMarker] = useState<MarkerRow | null>(null)
     const rowClickTimerRef = useRef<number | null>(null)
 
@@ -78,7 +91,7 @@ export default function Profile() {
                     axios.get('/api/markers/me/favorites/details', { withCredentials: true }),
                 ])
 
-                const created = (createdRes.data ?? []).map((m: any) => ({
+                const created = ((createdRes.data ?? []) as MarkerApiRow[]).map((m) => ({
                     id: m.id,
                     title: m.title,
                     category: categoryLabelMap[m.category] ?? m.category,
@@ -86,7 +99,7 @@ export default function Profile() {
                     lat: typeof m.lat === 'number' ? m.lat : undefined,
                     lng: typeof m.lng === 'number' ? m.lng : undefined,
                 }))
-                const favorites = (favRes.data ?? []).map((m: any) => ({
+                const favorites = ((favRes.data ?? []) as MarkerApiRow[]).map((m) => ({
                     id: m.id,
                     title: m.title,
                     category: categoryLabelMap[m.category] ?? m.category,
@@ -108,11 +121,6 @@ export default function Profile() {
 
         void loadMarkers()
     }, [user])
-
-    useEffect(() => {
-        if (typeof window === 'undefined') return
-        setJumpNoPrompt(window.localStorage.getItem('profile.skipMapJumpConfirm') === '1')
-    }, [])
 
     const goToMapMarker = (row: MarkerRow) => {
         const params = new URLSearchParams({

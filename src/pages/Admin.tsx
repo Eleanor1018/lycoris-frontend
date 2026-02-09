@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import axios from 'axios'
 import {
     Box,
@@ -44,8 +44,20 @@ export default function Admin() {
     const [pending, setPending] = useState<AdminMarker[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const getErrorMessage = (err: unknown, fallback: string) => {
+        if (typeof err === 'object' && err !== null && 'response' in err) {
+            const response = (err as { response?: { data?: unknown } }).response
+            const data = response?.data
+            if (typeof data === 'string') return data
+            if (data && typeof data === 'object' && 'message' in data) {
+                const msg = (data as { message?: unknown }).message
+                if (typeof msg === 'string') return msg
+            }
+        }
+        return fallback
+    }
 
-    const loadPending = async () => {
+    const loadPending = useCallback(async () => {
         try {
             setLoading(true)
             const res = await axios.get<AdminMarker[]>('/api/admin/markers/pending', {
@@ -53,23 +65,23 @@ export default function Admin() {
             })
             setPending(res.data || [])
             setError(null)
-        } catch (e: any) {
-            setError(e?.response?.data || '无法加载审核列表')
+        } catch (e: unknown) {
+            setError(getErrorMessage(e, '无法加载审核列表'))
         } finally {
             setLoading(false)
         }
-    }
+    }, [])
 
     useEffect(() => {
-        loadPending()
-    }, [])
+        void loadPending()
+    }, [loadPending])
 
     const handleAction = async (id: number, action: 'approve' | 'reject') => {
         try {
             await axios.post(`/api/admin/markers/${id}/${action}`, null, { withCredentials: true })
             setPending(prev => prev.filter(item => item.id !== id))
-        } catch (e: any) {
-            setError(e?.response?.data || '操作失败')
+        } catch (e: unknown) {
+            setError(getErrorMessage(e, '操作失败'))
         }
     }
 

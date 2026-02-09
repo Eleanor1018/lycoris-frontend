@@ -39,6 +39,7 @@ export default function NavigationBar() {
     const theme = useTheme()
     const isDesktop = useMediaQuery(theme.breakpoints.up('md'))
     const [isNavCollapsed, setIsNavCollapsed] = useState(false)
+    const navCollapsed = isDesktop && isNavCollapsed
 
     const navItems: NavItem[] = useMemo(
         () => [
@@ -79,10 +80,7 @@ export default function NavigationBar() {
 
     useEffect(() => {
         if (typeof window === 'undefined') return
-        if (!isDesktop) {
-            setIsNavCollapsed(false)
-            return
-        }
+        if (!isDesktop) return
 
         lastScrollYRef.current = window.scrollY
         const onScroll = () => {
@@ -104,15 +102,11 @@ export default function NavigationBar() {
     }, [isDesktop])
 
     useEffect(() => {
-        setIsNavCollapsed(false)
-    }, [location.pathname])
-
-    useEffect(() => {
         document.documentElement.style.setProperty(
             '--nav-offset',
-            isDesktop && isNavCollapsed ? '0px' : 'var(--nav-height, 72px)'
+            navCollapsed ? '0px' : 'var(--nav-height, 72px)'
         )
-    }, [isDesktop, isNavCollapsed])
+    }, [navCollapsed])
 
     return (
         <AppBar
@@ -127,7 +121,7 @@ export default function NavigationBar() {
                 top: 0,
                 left: 0,
                 right: 0,
-                transform: isDesktop && isNavCollapsed ? 'translateY(calc(-1 * var(--nav-height, 72px)))' : 'translateY(0)',
+                transform: navCollapsed ? 'translateY(calc(-1 * var(--nav-height, 72px)))' : 'translateY(0)',
                 transition: 'transform 220ms ease',
             }}
         >

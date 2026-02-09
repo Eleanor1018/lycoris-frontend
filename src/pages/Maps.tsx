@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react'
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
     Box,
@@ -28,6 +28,7 @@ import type { AlertColor } from '@mui/material'
 
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import axios from 'axios'
+import type { AxiosError } from 'axios'
 import L from 'leaflet'
 import type { Layer, LeafletMouseEvent, Map as LeafletMap } from 'leaflet'
 import type { MarkerCategory } from '../types/marker'
@@ -72,6 +73,41 @@ type SavedMapView = {
     lat: number
     lng: number
     zoom: number
+}
+
+type FocusTarget = {
+    lat: number
+    lng: number
+    title?: string
+}
+
+const coerceMarkerArray = (raw: unknown): ApiMarker[] => {
+    if (Array.isArray(raw)) return raw as ApiMarker[]
+    if (raw && typeof raw === 'object') {
+        const obj = raw as Record<string, unknown>
+        if (Array.isArray(obj.content)) return obj.content as ApiMarker[]
+        if (Array.isArray(obj.items)) return obj.items as ApiMarker[]
+        if (Array.isArray(obj.data)) return obj.data as ApiMarker[]
+    }
+    return []
+}
+
+const sanitizeAttribution = (text: string): string =>
+    text
+        .replaceAll('🇺🇦', '')
+        .replaceAll('Stand with Ukraine', '')
+        .replaceAll('  ', ' ')
+        .trim()
+
+const extractApiErrorMessage = (error: unknown, fallback: string): string => {
+    const axiosError = error as AxiosError
+    const data = axiosError?.response?.data
+    if (typeof data === 'string' && data.trim()) return data
+    if (data && typeof data === 'object' && 'message' in data) {
+        const msg = (data as { message?: unknown }).message
+        if (typeof msg === 'string' && msg.trim()) return msg
+    }
+    return fallback
 }
 
 // —— 小工具：生成临时 id
@@ -349,7 +385,12 @@ export default function Maps() {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [deleting, setDeleting] = useState(false)
     const [canDeleteDraft, setCanDeleteDraft] = useState(true)
+    const [canUploadImageDraft, setCanUploadImageDraft] = useState(true)
+    const [missingImageMarkerIds, setMissingImageMarkerIds] = useState<Set<number>>(new Set())
+    const overlayTopOffset = 'calc(env(safe-area-inset-top, 0px) + 12px)'
+    const overlayBottomOffset = 'calc(env(safe-area-inset-bottom, 0px) + 20px)'
     const markerViewportRequestSeq = useRef(0)
+    const markerImageUrlRef = useRef<Map<number, string>>(new Map())
     const targetFocusDoneRef = useRef<string | null>(null)
     const viewportMetaPrevRef = useRef<string | null>(null)
     const isIOSWebKit = useMemo(() => {
@@ -372,6 +413,11 @@ export default function Maps() {
         if (typeof window === 'undefined') return
         window.localStorage.setItem('map.tileProvider', tileProvider)
     }, [tileProvider])
+
+    const handleMapReady = useCallback((mapInstance: LeafletMap) => {
+        mapInstance.attributionControl?.setPrefix('')
+        setMap(mapInstance)
+    }, [])
 
     useEffect(() => {
         if (typeof window === 'undefined') return
@@ -447,14 +493,14 @@ export default function Maps() {
                 withCredentials: true,
             })
             if (seq !== markerViewportRequestSeq.current) return
-            setMarkers(res.data ?? [])
+            setMarkers(coerceMarkerArray(res.data))
         } catch (e) {
             if (seq !== markerViewportRequestSeq.current) return
             console.error('load viewport markers failed', e)
         }
     }
 
-    const loadFavorites = async () => {
+    const loadFavorites = useCallback(async () => {
         if (!isLoggedIn) {
             setFavoriteIds(new Set())
             return
@@ -465,11 +511,11 @@ export default function Maps() {
         } catch {
             setFavoriteIds(new Set())
         }
-    }
+    }, [isLoggedIn])
 
     useEffect(() => {
         void loadFavorites()
-    }, [isLoggedIn])
+    }, [loadFavorites])
 
     useEffect(() => {
         if (!isLoggedIn && addMode) setAddMode(false)
@@ -503,7 +549,8 @@ export default function Maps() {
     )
 
     const filteredMarkers = useMemo(() => {
-        return markers.filter((m) => {
+        const markerList = Array.isArray(markers) ? markers : []
+        return markerList.filter((m) => {
             if (!visibleCats[normalizeCategory(m.category)]) return false
             if (nearbyOnly && !nearbyIds.has(m.id)) return false
             if (ownerFilter === 'mine') {
@@ -533,7 +580,8 @@ export default function Maps() {
             return
         }
 
-        const resolved = byId ?? (targetLatLng ? { lat: targetLatLng.lat, lng: targetLatLng.lng, title: targetTitle } : null)
+        const resolved: FocusTarget | null =
+            byId ?? (targetLatLng ? { lat: targetLatLng.lat, lng: targetLatLng.lng, title: targetTitle } : null)
 
         if (!resolved) return
 
@@ -555,7 +603,7 @@ export default function Maps() {
                     }
                 })
                 if (!opened) {
-                    const title = (resolved as any).title || targetTitle
+                    const title = resolved.title || targetTitle
                     L.popup()
                         .setLatLng([resolved.lat, resolved.lng])
                         .setContent(title ? `<strong>${title}</strong>` : '点位')
@@ -601,6 +649,32 @@ export default function Maps() {
     }, [map])
 
     useEffect(() => {
+        setMissingImageMarkerIds((prev) => {
+            if (prev.size === 0) return prev
+
+            const next = new Set(prev)
+            const currentMap = new Map<number, string>()
+            for (const marker of markers) {
+                if (marker.markImage) {
+                    currentMap.set(marker.id, marker.markImage)
+                }
+            }
+
+            for (const markerId of prev) {
+                const latestUrl = currentMap.get(markerId)
+                const previousUrl = markerImageUrlRef.current.get(markerId)
+                // Retry once image URL changed, or marker/image disappeared.
+                if (!latestUrl || (previousUrl && latestUrl !== previousUrl)) {
+                    next.delete(markerId)
+                }
+            }
+
+            markerImageUrlRef.current = currentMap
+            return next
+        })
+    }, [markers])
+
+    useEffect(() => {
         if (!isIOSWebKit || typeof document === 'undefined') return
         const vv = window.visualViewport
         if (vv && vv.scale !== 1 && !hasScaleResetFlag) {
@@ -629,6 +703,37 @@ export default function Maps() {
             if (previous != null) viewportMeta.setAttribute('content', previous)
         }
     }, [isIOSWebKit, hasScaleResetFlag])
+
+    useEffect(() => {
+        if (!isIOSWebKit || typeof document === 'undefined') return
+
+        const preventGestureZoom = (event: Event) => {
+            event.preventDefault()
+        }
+
+        const preventPopupPinchZoom = (event: TouchEvent) => {
+            const target = event.target as HTMLElement | null
+            if (!target) return
+            const inMapPopup = Boolean(target.closest('.leaflet-popup'))
+            if (!inMapPopup) return
+            const touchCount = event.touches?.length ?? 0
+            if (touchCount > 1) {
+                event.preventDefault()
+            }
+        }
+
+        document.addEventListener('gesturestart', preventGestureZoom, { passive: false })
+        document.addEventListener('gesturechange', preventGestureZoom, { passive: false })
+        document.addEventListener('gestureend', preventGestureZoom, { passive: false })
+        document.addEventListener('touchmove', preventPopupPinchZoom, { passive: false })
+
+        return () => {
+            document.removeEventListener('gesturestart', preventGestureZoom)
+            document.removeEventListener('gesturechange', preventGestureZoom)
+            document.removeEventListener('gestureend', preventGestureZoom)
+            document.removeEventListener('touchmove', preventPopupPinchZoom)
+        }
+    }, [isIOSWebKit])
 
     useEffect(() => {
         if (!hasScaleResetFlag) return
@@ -683,10 +788,12 @@ export default function Maps() {
         setMarkImageFile(null)
         setEditingId(null)
         setCanDeleteDraft(true)
+        setCanUploadImageDraft(true)
         setAddMode(false)
     }
 
     const openEdit = (m: ApiMarker) => {
+        const isOwner = user?.publicId != null && m.userPublicId === user.publicId
         setDraft({
             tempId: uid(),
             lat: m.lat,
@@ -701,7 +808,8 @@ export default function Maps() {
         })
         setMarkImageFile(null)
         setEditingId(m.id)
-        setCanDeleteDraft(user?.publicId != null && m.userPublicId === user.publicId)
+        setCanDeleteDraft(isOwner)
+        setCanUploadImageDraft(isOwner)
         setAddMode(false)
     }
 
@@ -710,6 +818,7 @@ export default function Maps() {
         setMarkImageFile(null)
         setEditingId(null)
         setCanDeleteDraft(true)
+        setCanUploadImageDraft(true)
     }
 
     const recenterToUserLocation = () => {
@@ -762,7 +871,7 @@ export default function Maps() {
                 params: { lat, lng, radius: nearbyRadius, category: nearbyCategory },
                 withCredentials: true,
             })
-            const list = res.data ?? []
+            const list = coerceMarkerArray(res.data)
             const results: NearbyResult[] = list.map((m) => ({
                 ...m,
                 distanceMeters: haversineMeters(lat, lng, m.lat, m.lng),
@@ -777,9 +886,8 @@ export default function Maps() {
                 showNotice(`你附近 ${nearbyRadius}m 内暂无${nearbyCategoryLabel[nearbyCategory]}点位。`, 'info')
                 return
             }
-        } catch (e: any) {
-            const msg = e?.response?.data?.message || e?.response?.data || '附近查询失败'
-            showNotice(String(msg), 'error')
+        } catch (e: unknown) {
+            showNotice(extractApiErrorMessage(e, '附近查询失败'), 'error')
         } finally {
             setNearbyLoading(false)
         }
@@ -827,7 +935,7 @@ export default function Maps() {
                 created = res.data
             }
 
-            if (markImageFile) {
+            if (markImageFile && canUploadImageDraft) {
                 const form = new FormData()
                 form.append('file', markImageFile)
                 const imgRes = await axios.post<ApiMarker>(
@@ -838,21 +946,16 @@ export default function Maps() {
                 created = imgRes.data
             }
 
-            setMarkers((prev) => [created, ...prev.filter((m) => m.id !== created.id)])
+            setMarkers((prev) => {
+                const safePrev = Array.isArray(prev) ? prev : []
+                return [created, ...safePrev.filter((m) => m.id !== created.id)]
+            })
             setDraft(null)
             setMarkImageFile(null)
             setEditingId(null)
             setReviewNoticeOpen(true)
-        } catch (e: any) {
-            const data = e?.response?.data
-            const msg =
-                typeof data === 'string'
-                    ? data
-                    : data?.message
-                        ? String(data.message)
-                        : JSON.stringify(data, null, 2)
-
-            showNotice(msg || '保存失败', 'error')
+        } catch (e: unknown) {
+            showNotice(extractApiErrorMessage(e, '保存失败'), 'error')
         }
     }
 
@@ -868,23 +971,22 @@ export default function Maps() {
             }
             await loadFavorites()
             showNotice('点位已删除', 'success')
-        } catch (e: any) {
-            const msg = e?.response?.data?.message || e?.response?.data || '删除失败'
-            showNotice(String(msg), 'error')
+        } catch (e: unknown) {
+            showNotice(extractApiErrorMessage(e, '删除失败'), 'error')
         } finally {
             setDeleting(false)
         }
     }
 
     return (
-        <Box sx={{ height: 'calc(100vh - 64px)', width: '100%' }}>
+        <Box sx={{ height: 'calc(100dvh - var(--nav-offset, var(--nav-height, 64px)))', width: '100%' }}>
             <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
                     <Box
                         sx={{
                             position: 'absolute',
                             zIndex: 1200,
                             left: { xs: 12, md: 16 },
-                            top: { xs: 12, md: 16 },
+                            top: { xs: overlayTopOffset, md: 16 },
                             pointerEvents: 'none',
                         }}
                     >
@@ -943,7 +1045,7 @@ export default function Maps() {
                             position: 'fixed',
                             zIndex: 1200,
                             left: 20,
-                            bottom: 20,
+                            bottom: overlayBottomOffset,
                             pointerEvents: 'none',
                             '& .MuiButton-root': {
                                 pointerEvents: 'auto',
@@ -997,7 +1099,7 @@ export default function Maps() {
                             position: 'fixed',
                             zIndex: 1200,
                             left: '50%',
-                            bottom: 20,
+                            bottom: overlayBottomOffset,
                             transform: 'translateX(-50%)',
                             pointerEvents: 'none',
                         }}
@@ -1052,7 +1154,7 @@ export default function Maps() {
                             position: 'fixed',
                             zIndex: 1200,
                             right: 20,
-                            bottom: 20,
+                            bottom: overlayBottomOffset,
                             width: 46,
                             height: 46,
                             minWidth: 46,
@@ -1113,7 +1215,7 @@ export default function Maps() {
                         sx={{
                             position: 'absolute',
                             right: { xs: 12, md: 16 },
-                            top: { xs: 12, md: 16 },
+                            top: { xs: overlayTopOffset, md: 16 },
                             zIndex: 1200,
                             bgcolor: '#fff',
                             borderRadius: 3,
@@ -1247,20 +1349,21 @@ export default function Maps() {
                         center={initialCenter}
                         zoom={initialZoom}
                         zoomControl={false}
+                        attributionControl
                         touchZoom
                         doubleClickZoom
                         scrollWheelZoom
                         worldCopyJump
                         style={{ height: '100%', width: '100%', touchAction: 'none' }}
                     >
-                        <MapReady onReady={setMap} />
+                        <MapReady onReady={handleMapReady} />
                         <TileLayer
-                            attribution={tileProviderConfig[activeTileProvider].attribution}
+                            attribution={sanitizeAttribution(tileProviderConfig[activeTileProvider].attribution)}
                             url={tileProviderConfig[activeTileProvider].url}
                         />
                         {tileProviderConfig[activeTileProvider].labelUrl ? (
                             <TileLayer
-                                attribution={tileProviderConfig[activeTileProvider].attribution}
+                                attribution={sanitizeAttribution(tileProviderConfig[activeTileProvider].attribution)}
                                 url={tileProviderConfig[activeTileProvider].labelUrl!}
                             />
                         ) : null}
@@ -1332,13 +1435,14 @@ export default function Maps() {
                                         </Typography>
                                     ) : null}
 
-                                    {m.markImage ? (
+                                    {!missingImageMarkerIds.has(m.id) && m.markImage ? (
                                         <Box
                                             component="img"
                                             src={toBackendAssetUrl(m.markImage)}
                                             alt={m.title}
                                             onError={(e) => {
                                                 e.currentTarget.style.display = 'none'
+                                                setMissingImageMarkerIds((prev) => new Set(prev).add(m.id))
                                             }}
                                             sx={{
                                                 mt: 1,
@@ -1653,6 +1757,7 @@ export default function Maps() {
                 draft={draft}
                 editingId={editingId}
                 canDelete={canDeleteDraft}
+                canUploadImage={canUploadImageDraft}
                 categoryLabel={categoryLabel}
                 markImageFile={markImageFile}
                 setDraft={setDraft}
