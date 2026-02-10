@@ -146,6 +146,7 @@ const nearbyCategoryLabel: Record<NearbyCategory, string> = {
 const INACTIVE_MARKER_COLOR = '#9e9e9e'
 const MAP_LAST_VIEW_KEY = 'map.lastView'
 const MAP_NEARBY_CATEGORY_KEY = 'map.nearbyCategory'
+const MAP_ADD_MARKER_HINT_SEEN_KEY = 'map.addMarkerHintSeen'
 const THUNDERFOREST_API_KEY = (import.meta.env.VITE_THUNDERFOREST_API_KEY ?? '').trim()
 const TIANDITU_API_KEY = (import.meta.env.VITE_TIANDITU_API_KEY ?? '').trim()
 const hasThunderforestKey = THUNDERFOREST_API_KEY.length > 0
@@ -387,6 +388,8 @@ export default function Maps() {
     const [noticeSeverity, setNoticeSeverity] = useState<AlertColor>('info')
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
     const [deleting, setDeleting] = useState(false)
+    const [addHintOpen, setAddHintOpen] = useState(false)
+    const [addHintPulse, setAddHintPulse] = useState(false)
     const [canDeleteDraft, setCanDeleteDraft] = useState(true)
     const [missingImageMarkerIds, setMissingImageMarkerIds] = useState<Set<number>>(new Set())
     const overlayTopOffset = 'calc(env(safe-area-inset-top, 0px) + 12px)'
@@ -410,6 +413,23 @@ export default function Maps() {
         setNoticeSeverity(severity)
         setNoticeOpen(true)
     }
+
+    const dismissAddHint = useCallback(() => {
+        setAddHintOpen(false)
+        setAddHintPulse(false)
+        if (typeof window !== 'undefined') {
+            window.localStorage.setItem(MAP_ADD_MARKER_HINT_SEEN_KEY, '1')
+        }
+    }, [])
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+        if (window.localStorage.getItem(MAP_ADD_MARKER_HINT_SEEN_KEY) === '1') return
+        setAddHintOpen(true)
+        setAddHintPulse(true)
+        const timer = window.setTimeout(() => setAddHintPulse(false), 3000)
+        return () => window.clearTimeout(timer)
+    }, [])
 
     useEffect(() => {
         if (typeof window === 'undefined') return
@@ -977,6 +997,10 @@ export default function Maps() {
         }
     }
 
+    const addHintText = isLoggedIn
+        ? '点击左上角按钮即可在地图上标记点位。'
+        : '登录后点击左上角按钮可在地图上标记点位。'
+
     return (
         <Box sx={{ height: 'calc(100dvh - var(--nav-offset, var(--nav-height, 64px)))', width: '100%' }}>
             <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
@@ -992,6 +1016,7 @@ export default function Maps() {
                         <Button
                             variant="contained"
                             onClick={() => {
+                                if (addHintOpen) dismissAddHint()
                                 if (!isLoggedIn) {
                                     navigate('/login')
                                     return
@@ -1017,6 +1042,16 @@ export default function Maps() {
                                           outlineOffset: '1px',
                                       }
                                     : null),
+                                ...(addHintPulse
+                                    ? {
+                                          animation: 'mapAddMarkerPulse 1s ease-in-out 3',
+                                          '@keyframes mapAddMarkerPulse': {
+                                              '0%': { transform: 'scale(1)' },
+                                              '50%': { transform: 'scale(1.08)' },
+                                              '100%': { transform: 'scale(1)' },
+                                          },
+                                      }
+                                    : null),
                             }}
                             aria-label={!isLoggedIn ? '登录后添加' : addMode ? '添加中' : '添加标记点'}
                         >
@@ -1037,6 +1072,60 @@ export default function Maps() {
                             </Box>
                         </Button>
                     </Box>
+                    {addHintOpen ? (
+                        <Box
+                            sx={{
+                                position: 'absolute',
+                                zIndex: 1250,
+                                left: { xs: 68, md: 74 },
+                                top: { xs: overlayTopOffset, md: 16 },
+                                width: { xs: 220, md: 280 },
+                                pointerEvents: 'auto',
+                            }}
+                        >
+                            <Card
+                                sx={{
+                                    position: 'relative',
+                                    borderRadius: 2.5,
+                                    border: '1px solid rgba(122, 75, 143, 0.2)',
+                                    boxShadow: '0 12px 26px rgba(72, 42, 92, 0.18)',
+                                    '&::before': {
+                                        content: '""',
+                                        position: 'absolute',
+                                        left: -8,
+                                        top: 14,
+                                        width: 0,
+                                        height: 0,
+                                        borderTop: '8px solid transparent',
+                                        borderBottom: '8px solid transparent',
+                                        borderRight: '8px solid #fff',
+                                    },
+                                }}
+                            >
+                                <CardContent sx={{ p: 1.2, '&:last-child': { pb: 1.2 } }}>
+                                    <Typography sx={{ fontSize: 13, lineHeight: 1.45, color: '#4a2c62' }}>
+                                        {addHintText}
+                                    </Typography>
+                                    <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.8 }}>
+                                        <Button
+                                            size="small"
+                                            onClick={dismissAddHint}
+                                            sx={{
+                                                minWidth: 0,
+                                                px: 1.1,
+                                                borderRadius: 999,
+                                                textTransform: 'none',
+                                                color: '#744988',
+                                                fontWeight: 700,
+                                            }}
+                                        >
+                                            我知道了
+                                        </Button>
+                                    </Stack>
+                                </CardContent>
+                            </Card>
+                        </Box>
+                    ) : null}
 
                     <Stack
                         spacing={1}
