@@ -145,7 +145,7 @@ export default function NavigationBar() {
                     anchor="left"
                     open={navOpen}
                     onClose={closeNavMenu}
-                    PaperProps={{ sx: { width: '100vw' } }}
+                    PaperProps={{ sx: { width: '100vw', borderRadius: 0 } }}
                 >
                     <Box
                         sx={{

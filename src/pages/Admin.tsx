@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import {
     Box,
@@ -9,7 +9,10 @@ import {
     Chip,
     Divider,
     CircularProgress,
+    Pagination,
 } from '@mui/material'
+import { useNavigate } from 'react-router-dom'
+import AdminNav from '../components/AdminNav'
 
 type AdminMarker = {
     id: number
@@ -71,9 +74,14 @@ const statusColor = (status?: string) => {
 }
 
 export default function Admin() {
+    const PAGE_SIZE = 10
+    const navigate = useNavigate()
     const [pending, setPending] = useState<AdminMarker[]>([])
     const [pendingEdits, setPendingEdits] = useState<PendingEditProposal[]>([])
     const [pendingImages, setPendingImages] = useState<PendingImageProposal[]>([])
+    const [pendingPage, setPendingPage] = useState(1)
+    const [editPage, setEditPage] = useState(1)
+    const [imagePage, setImagePage] = useState(1)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
     const getErrorMessage = (err: unknown, fallback: string) => {
@@ -112,6 +120,36 @@ export default function Admin() {
         void loadPending()
     }, [loadPending])
 
+    useEffect(() => {
+        const maxPage = Math.max(1, Math.ceil(pending.length / PAGE_SIZE))
+        if (pendingPage > maxPage) setPendingPage(maxPage)
+    }, [pending.length, pendingPage, PAGE_SIZE])
+
+    useEffect(() => {
+        const maxPage = Math.max(1, Math.ceil(pendingEdits.length / PAGE_SIZE))
+        if (editPage > maxPage) setEditPage(maxPage)
+    }, [pendingEdits.length, editPage, PAGE_SIZE])
+
+    useEffect(() => {
+        const maxPage = Math.max(1, Math.ceil(pendingImages.length / PAGE_SIZE))
+        if (imagePage > maxPage) setImagePage(maxPage)
+    }, [pendingImages.length, imagePage, PAGE_SIZE])
+
+    const pendingPageItems = useMemo(() => {
+        const start = (pendingPage - 1) * PAGE_SIZE
+        return pending.slice(start, start + PAGE_SIZE)
+    }, [pending, pendingPage, PAGE_SIZE])
+
+    const editPageItems = useMemo(() => {
+        const start = (editPage - 1) * PAGE_SIZE
+        return pendingEdits.slice(start, start + PAGE_SIZE)
+    }, [pendingEdits, editPage, PAGE_SIZE])
+
+    const imagePageItems = useMemo(() => {
+        const start = (imagePage - 1) * PAGE_SIZE
+        return pendingImages.slice(start, start + PAGE_SIZE)
+    }, [pendingImages, imagePage, PAGE_SIZE])
+
     const handleAction = async (id: number, action: 'approve' | 'reject') => {
         try {
             await axios.post(`/api/admin/markers/${id}/${action}`, null, { withCredentials: true })
@@ -143,20 +181,28 @@ export default function Admin() {
         <Box sx={{ px: { xs: 2, md: 4 }, py: { xs: 3, md: 4 } }}>
             <Stack spacing={2}>
                 <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                    点位审核
+                    管理后台 · 审核中心
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                     仅管理员可访问此页面。新建/修改点位需要审核通过后才会对外展示。
                 </Typography>
+                <AdminNav />
                 <Divider />
                 {loading ? (
                     <Stack alignItems="center" sx={{ py: 6 }}>
                         <CircularProgress />
                     </Stack>
                 ) : error ? (
-                    <Paper sx={{ p: 2, bgcolor: '#fff3f3', border: '1px solid #f5c2c2' }}>
-                        <Typography color="error">{String(error)}</Typography>
-                    </Paper>
+                    <Stack spacing={2}>
+                        <Paper sx={{ p: 2, bgcolor: '#fff3f3', border: '1px solid #f5c2c2' }}>
+                            <Typography color="error">{String(error)}</Typography>
+                        </Paper>
+                        {String(error).includes('二级密码') ? (
+                            <Button variant="contained" onClick={() => navigate('/admin')}>
+                                去管理入口验证二级密码
+                            </Button>
+                        ) : null}
+                    </Stack>
                 ) : (
                     <Stack spacing={2}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
@@ -167,7 +213,7 @@ export default function Admin() {
                                 <Typography color="text.secondary">暂无待审核点位</Typography>
                             </Paper>
                         ) : (
-                            pending.map(item => (
+                            pendingPageItems.map(item => (
                                 <Paper key={item.id} sx={{ p: 2, borderRadius: 2 }}>
                                     <Stack spacing={1.2}>
                                         <Stack direction="row" spacing={1} alignItems="center">
@@ -216,6 +262,14 @@ export default function Admin() {
                                 </Paper>
                             ))
                         )}
+                        {pending.length > PAGE_SIZE ? (
+                            <Pagination
+                                count={Math.max(1, Math.ceil(pending.length / PAGE_SIZE))}
+                                page={pendingPage}
+                                onChange={(_, p) => setPendingPage(p)}
+                                color="primary"
+                            />
+                        ) : null}
 
                         <Divider />
                         <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
@@ -226,7 +280,7 @@ export default function Admin() {
                                 <Typography color="text.secondary">暂无待审核编辑提案</Typography>
                             </Paper>
                         ) : (
-                            pendingEdits.map((item) => (
+                            editPageItems.map((item) => (
                                 <Paper key={`edit-${item.id}`} sx={{ p: 2, borderRadius: 2 }}>
                                     <Stack spacing={1.2}>
                                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
@@ -272,6 +326,14 @@ export default function Admin() {
                                 </Paper>
                             ))
                         )}
+                        {pendingEdits.length > PAGE_SIZE ? (
+                            <Pagination
+                                count={Math.max(1, Math.ceil(pendingEdits.length / PAGE_SIZE))}
+                                page={editPage}
+                                onChange={(_, p) => setEditPage(p)}
+                                color="primary"
+                            />
+                        ) : null}
 
                         <Divider />
                         <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
@@ -282,7 +344,7 @@ export default function Admin() {
                                 <Typography color="text.secondary">暂无待审核图片</Typography>
                             </Paper>
                         ) : (
-                            pendingImages.map((item) => (
+                            imagePageItems.map((item) => (
                                 <Paper key={`img-${item.id}`} sx={{ p: 2, borderRadius: 2 }}>
                                     <Stack spacing={1.2}>
                                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
@@ -327,6 +389,14 @@ export default function Admin() {
                                 </Paper>
                             ))
                         )}
+                        {pendingImages.length > PAGE_SIZE ? (
+                            <Pagination
+                                count={Math.max(1, Math.ceil(pendingImages.length / PAGE_SIZE))}
+                                page={imagePage}
+                                onChange={(_, p) => setImagePage(p)}
+                                color="primary"
+                            />
+                        ) : null}
                     </Stack>
                 )}
             </Stack>

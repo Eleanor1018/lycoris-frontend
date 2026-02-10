@@ -8,10 +8,12 @@ import {
     Button,
     Chip,
     Divider,
-    TextField,
     CircularProgress,
+    Pagination,
 } from '@mui/material'
+import { useNavigate } from 'react-router-dom'
 import MarkerFormDialog, { type DraftMarker } from '../components/MarkerFormDialog'
+import AdminNav from '../components/AdminNav'
 
 type AdminMarker = {
     id: number
@@ -53,11 +55,12 @@ const toDraft = (marker: AdminMarker): DraftMarker => ({
 })
 
 export default function AdminAll() {
+    const PAGE_SIZE = 10
+    const navigate = useNavigate()
     const [markers, setMarkers] = useState<AdminMarker[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
-    const [passcode, setPasscode] = useState('')
-    const [verified, setVerified] = useState(false)
+    const [page, setPage] = useState(1)
 
     const [draft, setDraft] = useState<DraftMarker | null>(null)
     const [editingId, setEditingId] = useState<number | null>(null)
@@ -76,6 +79,10 @@ export default function AdminAll() {
     }
 
     const filteredMarkers = useMemo(() => markers, [markers])
+    const pagedMarkers = useMemo(() => {
+        const start = (page - 1) * PAGE_SIZE
+        return filteredMarkers.slice(start, start + PAGE_SIZE)
+    }, [filteredMarkers, page, PAGE_SIZE])
 
     const loadAll = useCallback(async () => {
         setLoading(true)
@@ -84,35 +91,20 @@ export default function AdminAll() {
             setMarkers(res.data || [])
             setError(null)
         } catch (e: unknown) {
-            const message = getErrorMessage(e, '无法加载点位列表')
-            if (String(message).includes('二级密码')) {
-                setVerified(false)
-            }
-            setError(String(message))
+            setError(getErrorMessage(e, '无法加载点位列表'))
         } finally {
             setLoading(false)
         }
     }, [])
 
     useEffect(() => {
-        if (verified) {
-            void loadAll()
-        }
-    }, [verified, loadAll])
+        void loadAll()
+    }, [loadAll])
 
-    const handleVerify = async () => {
-        try {
-            await axios.post(
-                '/api/admin/verify',
-                { passcode },
-                { withCredentials: true }
-            )
-            setVerified(true)
-            setError(null)
-        } catch (e: unknown) {
-            setError(getErrorMessage(e, '二级密码验证失败'))
-        }
-    }
+    useEffect(() => {
+        const maxPage = Math.max(1, Math.ceil(filteredMarkers.length / PAGE_SIZE))
+        if (page > maxPage) setPage(maxPage)
+    }, [filteredMarkers.length, page, PAGE_SIZE])
 
     const openEditor = (marker: AdminMarker) => {
         setEditingId(marker.id)
@@ -162,37 +154,29 @@ export default function AdminAll() {
                     管理后台 · 全量点位
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                    本页面需要二级密码验证；请仅在可信设备与 HTTPS 环境使用。
+                    所有点位均可在这里编辑或删除。
                 </Typography>
+                <AdminNav />
                 <Divider />
 
-                {!verified ? (
-                    <Paper sx={{ p: 2, borderRadius: 2 }}>
-                        <Stack spacing={2}>
-                            <Typography sx={{ fontWeight: 600 }}>输入二级密码</Typography>
-                            <TextField
-                                type="password"
-                                label="二级密码"
-                                value={passcode}
-                                onChange={(e) => setPasscode(e.target.value)}
-                                fullWidth
-                            />
-                            <Button variant="contained" onClick={handleVerify} sx={{ alignSelf: 'flex-start' }}>
-                                验证
-                            </Button>
-                        </Stack>
-                    </Paper>
-                ) : loading ? (
+                {loading ? (
                     <Stack alignItems="center" sx={{ py: 6 }}>
                         <CircularProgress />
                     </Stack>
                 ) : error ? (
-                    <Paper sx={{ p: 2, bgcolor: '#fff3f3', border: '1px solid #f5c2c2' }}>
-                        <Typography color="error">{String(error)}</Typography>
-                    </Paper>
+                    <Stack spacing={2}>
+                        <Paper sx={{ p: 2, bgcolor: '#fff3f3', border: '1px solid #f5c2c2' }}>
+                            <Typography color="error">{String(error)}</Typography>
+                        </Paper>
+                        {String(error).includes('二级密码') ? (
+                            <Button variant="contained" onClick={() => navigate('/admin')}>
+                                去管理入口验证二级密码
+                            </Button>
+                        ) : null}
+                    </Stack>
                 ) : (
                     <Stack spacing={2}>
-                        {filteredMarkers.map((item) => (
+                        {pagedMarkers.map((item) => (
                             <Paper key={item.id} sx={{ p: 2, borderRadius: 2 }}>
                                 <Stack spacing={1.2}>
                                     <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
@@ -232,6 +216,14 @@ export default function AdminAll() {
                                 </Stack>
                             </Paper>
                         ))}
+                        {filteredMarkers.length > PAGE_SIZE ? (
+                            <Pagination
+                                count={Math.max(1, Math.ceil(filteredMarkers.length / PAGE_SIZE))}
+                                page={page}
+                                onChange={(_, p) => setPage(p)}
+                                color="primary"
+                            />
+                        ) : null}
                     </Stack>
                 )}
             </Stack>

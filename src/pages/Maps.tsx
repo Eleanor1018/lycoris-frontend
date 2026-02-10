@@ -290,12 +290,15 @@ const getUserLocationIcon = (avatarUrl?: string | null) => {
 function ClickToAdd({
     enabled,
     onPick,
+    onMapTap,
 }: {
     enabled: boolean
     onPick: (lat: number, lng: number) => void
+    onMapTap?: () => void
 }) {
     useMapEvents({
         click(e: LeafletMouseEvent) {
+            onMapTap?.()
             if (!enabled) return
             onPick(e.latlng.lat, e.latlng.lng)
         },
@@ -1222,20 +1225,22 @@ export default function Maps() {
                             pointerEvents: 'none',
                         }}
                     >
-                        <Button
-                            size="small"
-                            onClick={() => setLegendOpen((v) => !v)}
-                            sx={{
-                                borderRadius: 999,
-                                textTransform: 'none',
-                                color: '#744988',
-                                fontWeight: 700,
-                                px: 1.5,
-                                pointerEvents: 'auto',
-                            }}
-                        >
-                            筛选点位 {legendOpen ? '▲' : '▼'}
-                        </Button>
+                        <Box sx={{ display: 'flex', justifyContent: legendOpen ? 'flex-end' : 'flex-start' }}>
+                            <Button
+                                size="small"
+                                onClick={() => setLegendOpen((v) => !v)}
+                                sx={{
+                                    borderRadius: 999,
+                                    textTransform: 'none',
+                                    color: '#744988',
+                                    fontWeight: 700,
+                                    px: 1.5,
+                                    pointerEvents: 'auto',
+                                }}
+                            >
+                                筛选点位 {legendOpen ? '▲' : '▼'}
+                            </Button>
+                        </Box>
 
                         {legendOpen ? (
                             <Box sx={{ mt: 1, pointerEvents: 'auto' }}>
@@ -1365,7 +1370,15 @@ export default function Maps() {
                         ) : null}
 
                         {/* 点击地图创建点 */}
-                        <ClickToAdd enabled={addMode && isLoggedIn} onPick={openDraft} />
+                        <ClickToAdd
+                            enabled={addMode && isLoggedIn}
+                            onPick={openDraft}
+                            onMapTap={() => {
+                                if (isMobile && legendOpen) {
+                                    setLegendOpen(false)
+                                }
+                            }}
+                        />
 
                         {/* 已保存的点 */}
                         {filteredMarkers.map((m) => (

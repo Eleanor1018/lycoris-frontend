@@ -11,6 +11,8 @@ import Search from "./pages/Search.tsx";
 import About from "./pages/About.tsx";
 import Admin from "./pages/Admin.tsx";
 import AdminAll from "./pages/AdminAll.tsx";
+import AdminEntry from "./pages/AdminEntry.tsx";
+import AdminUsers from "./pages/AdminUsers.tsx";
 
 
 
@@ -29,8 +31,10 @@ export default function App() {
                 <Route path="/me" element={<Profile/>}></Route>
                 <Route path="/me/password" element={<ChangePassword/>}></Route>
                 <Route path="/search" element={<Search/>}></Route>
-                <Route path="/admin" element={<Admin/>}></Route>
+                <Route path="/admin" element={<AdminEntry/>}></Route>
+                <Route path="/admin/review" element={<Admin/>}></Route>
                 <Route path="/admin/all" element={<AdminAll/>}></Route>
+                <Route path="/admin/usr" element={<AdminUsers/>}></Route>
             </Route>
         </Routes>
     )
