@@ -42,8 +42,10 @@
 
 &ensp;&ensp;&ensp;&ensp;夏水仙由 雪雁 Nora，鹿鹿 Alicia 和 温晓 Aurora 共同设计并运营。
 
-&ensp;&ensp;&ensp;&ensp;如果有建议、遇到问题，请联系：
+&ensp;&ensp;&ensp;&ensp;如果有建议、遇到问题，请联系：LycorisTrans@gmail.com
 
-&ensp;&ensp;&ensp;&ensp;LycorisTrans@gmail.com
+&ensp;&ensp;&ensp;&ensp;相关代码已在Github开源：https://github.com/Eleanor1018/lycoris
+
+&ensp;&ensp;&ensp;&ensp;Twitter官方账号：https://x.com/LycorisTrans
 
 
